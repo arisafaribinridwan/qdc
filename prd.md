@@ -38,9 +38,9 @@ Aplikasi harus dibuat untuk flow pendek. Idealnya pekerjaan bulanan cukup mengik
 
 ## MVP core
 
-MVP pertama berfokus pada CRUD data dan report generation. Import Excel otomatis penuh boleh masuk fase berikutnya, karena MVP harus terlebih dahulu membuktikan bahwa aplikasi bisa menjadi database utama dan menghasilkan report yang berguna.
+MVP pertama berfokus pada CRUD data, import data input dari file Excel/CSV, dan report generation. Import otomatis penuh dari seluruh workbook historis boleh masuk fase berikutnya, karena MVP harus terlebih dahulu membuktikan bahwa aplikasi bisa menjadi database utama dan menghasilkan report yang berguna.
 
-MVP core terdiri dari master data, monthly data entry, validation, report preview, export PDF, export Excel, dan backup database. Fitur dashboard QRCC yang lebih luas, multi-user permission, audit trail detail, dan import semua workbook historis dapat ditunda.
+MVP core terdiri dari master data, monthly data entry, import data input dari file Excel/CSV, validation, report preview, export PDF, export Excel, dan backup database. Fitur dashboard QRCC yang lebih luas, multi-user permission, audit trail detail, dan import semua workbook historis dapat ditunda.
 
 ## Scope MVP
 
@@ -291,7 +291,7 @@ Phase 7 adalah Excel export. Siapkan template `.xlsx`, mapping cell/range, dan e
 
 Phase 8 adalah backup/restore. Tambahkan export database backup, restore, dan dokumentasi penggunaan internal QRCC.
 
-Phase 9 adalah import Excel opsional. Setelah MVP stabil, tambahkan import dari workbook lama menggunakan SheetJS, dimulai dari file yang paling sering dipakai atau format yang paling stabil.
+Phase 9 adalah import lanjutan opsional. Setelah MVP stabil, tambahkan import otomatis dari workbook lama menggunakan SheetJS, dimulai dari file yang paling sering dipakai atau format yang paling stabil.
 
 Phase 10 adalah polish. Tambahkan dashboard trend, export history, data duplicate detection lebih detail, shortcut keyboard, dan optimasi data entry.
 
@@ -322,3 +322,44 @@ MVP selesai ketika aplikasi bisa dipakai untuk satu siklus report bulanan dari a
 Project baru sebaiknya tidak dimulai dengan membuat semua fitur sekaligus. Mulailah dari database schema dan satu report paling penting. Setelah satu report berhasil dari input sampai PDF/Excel, baru perluas ke section lain. Jangan mulai dari dashboard besar atau import semua file historis, karena itu bisa membuat scope terlalu lebar sebelum core workflow terbukti.
 
 Prioritas pertama adalah membuat workflow bulanan terasa pendek. Jika aplikasi membuat user harus melakukan terlalu banyak klik atau input berulang, berarti produk belum menyelesaikan masalah utama. Setiap fitur harus diuji dengan pertanyaan: apakah ini mengurangi pekerjaan bulanan, mengurangi risiko salah angka, atau membuat output lebih cepat siap meeting? Jika tidak, fitur tersebut bisa ditunda.
+
+## GIT WORKFLOW
+```
+Main branch:    main
+Feature branch: feature/feature-name
+Bugfix branch:  bugfix/bug-name
+
+Commit message format:
+- feat:     Add feature X
+- fix:      Fix bug Y
+- docs:     Update documentation
+- refactor: Refactor module Z
+- test:     Add test for X
+```
+
+## Fiscal Calendar Definition (Japanese Corporate):
+- FH (First Half) = 1 April – 30 September
+- LH (Last Half) = 1 October – 31 March
+- Fiscal year label = calendar year of April (start of FY), contoh :
+  - `2025FH` = 1 Apr 2025 – 30 Sep 2025
+  - `2025LH` = 1 Oct 2025 – 31 Mar 2026
+
+
+## Pattern untuk Backend
+
+- Gunakan Pattern API → Service → Repository (a.k.a. layered/clean architecture)
+
+- **API Layer (Controller/Handler)**
+Menerima HTTP request, validasi input (format, required fields), lalu panggil service. Kembalikan response dalam format JSON. Layer ini tidak boleh punya business logic.
+
+- **Service Layer**
+Tempat semua business logic tinggal — aturan bisnis, kalkulasi, kondisi, orchestration antar-repository. Layer ini tidak tahu soal HTTP (tidak kenal req/res), dan tidak langsung akses database.
+
+- **Repository Layer**
+Satu-satunya layer yang boleh bicara dengan database. Berisi fungsi-fungsi seperti findById, create, update, delete. Kalau besok ganti dari PostgreSQL ke MongoDB, cukup ubah layer ini saja.
+
+| Layer	| Tanggung jawab | Dilarang |	Contoh nama file |
+| ------ | ------ | ---- | --- |
+| API / Controller |	Terima request, validasi input, format response	| Business logic, akses DB langsung	| user.controller.ts |
+| Service |	Business logic, rules, orchestration | Tahu soal HTTP, akses DB langsung | user.service.ts |
+| Repository | CRUD ke database, query ORM/SQL | Business logic, format HTTP response |	user.repository.ts |
