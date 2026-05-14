@@ -1,365 +1,522 @@
-# PRD — QRCC FQMS/F-COST Monthly Workflow
+ # PRD — QRCC FQMS/F-COST Monthly Workflow
 
-## Ringkasan produk
+> **Versi**: 1.0 · **Terakhir diperbarui**: 2026-05-14
+>
+> Dokumen ini adalah **sumber kebenaran utama (single source of truth)** untuk seluruh pengembangan aplikasi QRCC Data Center modul FQMS/F-COST. Jika ada konflik antara dokumen lain dengan file ini, **ikuti file ini**.
 
-Produk ini adalah aplikasi web internal QRCC untuk menggantikan workflow database Excel bulanan FQMS/F-COST yang saat ini masih banyak bergantung pada workbook, sheet helper, copy-paste, refresh manual, dan pengecekan lintas file. Produk ini menjadi bagian dari sistem QRCC Data Center, bukan aplikasi personal yang berdiri sendiri. Tujuan utamanya bukan membuat sistem enterprise yang kompleks, tetapi membuat tool kerja QRCC yang mempercepat pekerjaan rutin bulanan, mengurangi risiko salah input, dan menghasilkan output report PDF/Excel dengan layout yang familiar seperti report Excel saat ini.
+---
 
-Aplikasi ini akan menjadi sumber data utama untuk data FQMS, F-COST, model, kategori defect, kategori non-defect, repair action, sales quantity, PPM, dan report bulanan. Excel tidak lagi diposisikan sebagai database utama, tetapi tetap bisa dipakai sebagai format output, format template, atau sumber import pada masa transisi.
+## 1 · Ringkasan Produk
 
-Stack utama yang direkomendasikan adalah Nuxt 4, TypeScript strict, Vue, Nuxt UI 4, SQLite, Drizzle ORM, Better Auth bila dibutuhkan, ExcelJS untuk export Excel, SheetJS untuk import Excel bila dibutuhkan, dan Playwright/Puppeteer untuk generate PDF berbasis HTML/CSS.
+Aplikasi web internal QRCC untuk menggantikan workflow bulanan FQMS/F-COST yang saat ini bergantung pada Excel workbook, copy-paste, dan pengecekan manual. Bukan platform enterprise — ini **alat kerja** yang mempercepat proses bulanan dan menghasilkan report PDF/Excel.
 
-## Latar belakang masalah
+**Identitas aplikasi:**
 
-Workflow saat ini sudah mulai diarahkan ke desain database yang lebih baik, yaitu data panjang, master table, database bulanan, validasi, dan file presentasi yang membaca dari database. Namun selama masih berbasis Excel, proses bulanan tetap memiliki beberapa friction: workbook harus dibuka, query perlu di-refresh, formula/chart perlu dicek, output perlu disimpan manual, dan beberapa proses masih bergantung pada struktur workbook yang rentan berubah.
+| Field | Nilai |
+|---|---|
+| Nama Aplikasi | QRCC Data Center |
+| Deskripsi | Aplikasi dashboard internal QRCC untuk mengelola workflow FQMS, F-COST, PPM, Sales, Quality Issue, validasi data bulanan, dan report generation. |
+| Target User | Operator tunggal workflow bulanan FQMS/F-COST di QRCC LCD Local |
 
-Sebagai bagian dari sistem QRCC, aplikasi web ini menyederhanakan proses menjadi satu tempat kerja yang konsisten dengan identitas QRCC Data Center. User cukup membuka aplikasi QRCC, memilih bulan laporan, input atau import data, melihat validasi, lalu generate PDF/Excel. Proses yang sebelumnya tersebar di database workbook, job 4, job 5, dan file F-COST dapat diringkas ke dalam flow yang lebih pendek dan lebih terkontrol.
+---
 
-## Tujuan utama
+## 2 · Tech Stack
 
-Tujuan produk ini adalah membuat pekerjaan bulanan menjadi lebih cepat, konsisten, dan mudah diaudit. Data cukup masuk satu kali ke database aplikasi, kemudian semua output seperti summary, defect category, non-defect category, repair action, F-COST, PDF, dan Excel report dihasilkan otomatis dari sumber data yang sama.
+| Layer | Teknologi | Catatan |
+|---|---|---|
+| Framework | **Nuxt 4** (full-stack monolith) | Satu repo: UI + API + DB |
+| Bahasa | **TypeScript strict** | Seluruh codebase |
+| UI | **Vue 3 + Nuxt UI 4** | Komponen default untuk semua form/table |
+| Database | **SQLite** (local-first) | File tunggal, mudah backup |
+| ORM | **Drizzle ORM** | Schema-as-code, migration |
+| Validasi Input | **Zod** | Server-side route validation |
+| Export Excel | **ExcelJS** | Template `.xlsx` approach |
+| Export PDF | **Playwright** | Render HTML/CSS → PDF |
+| Auth | **Better Auth** | Opsional untuk MVP lokal, wajib jika deploy ke jaringan |
 
-Aplikasi harus membantu user menghindari copy-paste manual, geser kolom bulan, update angka yang sama di banyak sheet, dan pengecekan manual lintas workbook. Fokus produk adalah produktivitas kerja QRCC: cepat dipakai, tidak banyak konfigurasi, mudah backup, dan mudah diubah mengikuti format report yang sudah ada.
+---
 
-## Non-goals awal
+## 3 · Prinsip Kunci
 
-Versi awal tidak bertujuan menjadi sistem multi-user enterprise, tidak perlu approval workflow yang kompleks, tidak perlu deployment cloud sejak hari pertama, dan tidak perlu mengganti semua file Excel historis sekaligus. Aplikasi juga tidak perlu meniru semua perilaku Excel 1:1 di UI. Yang penting adalah data benar, flow bulanan pendek, validasi jelas, dan output report memenuhi kebutuhan meeting.
+1. **Single source of truth** — Data utama di SQLite, bukan Excel. Report adalah output, bukan input.
+2. **Long-format storage** — Data disimpan sebagai baris (`month`, `model`, `category`, `qty`). Wide-format hanya untuk tampilan report.
+3. **Flow pendek** — Idealnya: pilih bulan → input data → validasi → preview → export → selesai.
+4. **Grouping eksplisit** — Aturan penggabungan model (misal HD1400I → HD1500I) disimpan di tabel `model_group_rules`, bukan hardcode.
 
-## Target pengguna
+---
 
-Pengguna utama adalah operator atau pemilik workflow bulanan FQMS/F-COST di lingkungan QRCC LCD Local. Karena targetnya penggunaan internal QRCC yang dominan dijalankan oleh satu operator, desain aplikasi boleh mengutamakan efisiensi operator tunggal dibanding kebutuhan kolaborasi tim besar. Namun struktur data tetap harus rapi agar suatu saat bisa dikembangkan menjadi multi-user jika dibutuhkan.
-
-## Prinsip produk
-
-Aplikasi harus mengikuti prinsip single source of truth. Data utama disimpan di SQLite, bukan tersebar di banyak workbook. Report PDF dan Excel adalah output, bukan tempat input utama. Semua perhitungan penting seperti total defect, total non-defect, sales quantity, PPM, F-COST ratio, dan category summary harus berasal dari database yang sama.
-
-Aplikasi harus mempertahankan konsep long-format data. Data bulanan disimpan sebagai baris dengan kolom `month`, `model`, `category`, `qty`, dan atribut lain, bukan sebagai kolom bulan yang terus bergeser. Layout report boleh tetap wide-format agar mudah dibaca dalam meeting, tetapi database internal harus tetap panjang.
-
-Aplikasi harus dibuat untuk flow pendek. Idealnya pekerjaan bulanan cukup mengikuti pola: pilih bulan laporan, input/import data, cek validasi, preview report, generate PDF/Excel, simpan output.
-
-## MVP core
-
-MVP pertama berfokus pada CRUD data, import data input dari file Excel/CSV, dan report generation. Import otomatis penuh dari seluruh workbook historis boleh masuk fase berikutnya, karena MVP harus terlebih dahulu membuktikan bahwa aplikasi bisa menjadi database utama dan menghasilkan report yang berguna.
-
-MVP core terdiri dari master data, monthly data entry, import data input dari file Excel/CSV, validation, report preview, export PDF, export Excel, dan backup database. Fitur dashboard QRCC yang lebih luas, multi-user permission, audit trail detail, dan import semua workbook historis dapat ditunda.
-
-## Scope MVP
-
-MVP harus menyediakan pengelolaan master model. User bisa menambah, mengedit, menonaktifkan, dan menentukan model mana yang masuk report. Field minimal mencakup model name, model series, product, active status, report include, effective from, effective to, dan remark. Aturan khusus seperti HD1400I digabung ke HD1500I pada report harus disimpan sebagai mapping yang eksplisit, bukan hardcode tersembunyi.
-
-MVP harus menyediakan pengelolaan reference table. Reference table minimal mencakup defect category, non-defect category, repair action, factory atau product grouping jika diperlukan, dan comment/category mapping bila masih relevan. Reference table ini menjadi dasar normalisasi data.
-
-MVP harus menyediakan CRUD monthly model summary. User bisa mengisi atau mengedit data per bulan dan per model, seperti sales period, sales quantity, total defect quantity, total non-defect quantity, defect PPM, non-defect PPM, dan remark. PPM sebaiknya dihitung otomatis dari qty dan sales quantity, tetapi user tetap bisa melihat hasilnya dengan jelas.
-
-MVP harus menyediakan CRUD defect category. User bisa mengisi data defect per bulan, model, dan kategori seperti Power Unit, Main Unit, Panel, Software, dan Other. Aplikasi menghitung total per model dan memastikan total kategori sama dengan total defect summary.
-
-MVP harus menyediakan CRUD non-defect category. User bisa mengisi data non-defect per bulan, model, dan kategori seperti User Usage, Setting, Explanation, Signal, atau kategori final lain yang dipakai. Aplikasi menghitung total per model dan memastikan total kategori sama dengan total non-defect summary.
-
-MVP harus menyediakan CRUD repair action. User bisa mengisi repair action per bulan dan model, termasuk action name, qty, total, defect occupation, dan PPM jika dibutuhkan untuk report.
-
-MVP harus menyediakan CRUD F-COST. User bisa mengisi data F-COST bulanan seperti sales amount, sales quantity, F-COST amount, F-COST quantity, target, actual ratio, last year result, dan remark. Jika data F-COST masih berasal dari tool lama, MVP cukup menyediakan input manual atau paste-friendly table terlebih dahulu.
-
-MVP harus menyediakan validation page. Halaman ini menampilkan status OK/CHECK untuk jumlah model aktif yang masuk report, missing data untuk bulan laporan, duplicate model/month, total defect category versus summary, total non-defect category versus summary, konsistensi sales quantity, dan konsistensi bulan laporan.
-
-MVP harus menyediakan report preview. User bisa memilih report month lalu melihat preview halaman report dalam layout web yang mirip output Excel. Preview ini menjadi sumber untuk PDF generation.
-
-MVP harus menyediakan export PDF. PDF harus menggunakan layout yang mirip report Excel saat ini, minimal mencakup report summary, defective, non-defective, defect category by model, repair action, dan F-COST summary. Untuk MVP, PDF tidak harus langsung 100% identik pixel-by-pixel, tetapi harus cukup rapi untuk dipakai review dan sebagai dasar penyempurnaan layout.
-
-MVP harus menyediakan export Excel. Export Excel bisa dibuat dari template `.xlsx` atau dibuat programatis dengan ExcelJS. Untuk menjaga layout familiar, pendekatan template lebih disarankan: aplikasi mengisi data ke template report yang sudah disiapkan, lalu menghasilkan file report baru untuk bulan terpilih.
-
-MVP harus menyediakan backup/restore sederhana. Karena aplikasi memakai SQLite untuk penggunaan internal QRCC yang local-first, harus ada tombol atau command untuk export backup database dan restore dari backup. Ini penting agar aplikasi tidak menjadi single point of failure.
-
-## Out of scope untuk MVP
-
-Import otomatis dari seluruh workbook model active, import Power Query replacement penuh, role-based approval, cloud sync, real-time collaboration, automated email sending, advanced dashboard, AI insight, dan full historical migration tidak masuk MVP pertama. Fitur-fitur tersebut bisa dibuat setelah CRUD dan report generation stabil.
-
-## User stories MVP
-
-Sebagai user, saya ingin membuat bulan laporan baru agar saya bisa mulai proses FQMS/F-COST untuk bulan berjalan tanpa membuat banyak folder dan workbook manual.
-
-Sebagai user, saya ingin mengelola daftar model aktif agar report hanya mengambil model yang memang masuk keputusan management.
-
-Sebagai user, saya ingin menginput sales, defect, non-defect, repair action, dan F-COST di satu aplikasi agar saya tidak perlu update angka yang sama di banyak workbook.
-
-Sebagai user, saya ingin melihat status validasi OK/CHECK sebelum generate report agar kesalahan data diketahui sebelum meeting.
-
-Sebagai user, saya ingin preview report sebelum export agar saya bisa memastikan layout dan angka sudah benar.
-
-Sebagai user, saya ingin generate PDF dengan layout mirip Excel agar report bisa langsung dibagikan atau diarsipkan.
-
-Sebagai user, saya ingin export Excel dengan format mirip report sekarang agar tetap bisa dicek manual atau digunakan jika meeting masih membutuhkan file Excel.
-
-Sebagai user QRCC, saya ingin backup database agar data workflow QRCC aman dan mudah dipindahkan.
-
-## Flow pengguna MVP
-
-Flow utama dimulai dari halaman bulan laporan. User membuat atau memilih report month, misalnya `2026-04`. Setelah itu user membuka halaman master model untuk memastikan daftar model aktif sudah benar. Kemudian user mengisi monthly summary, defect category, non-defect category, repair action, dan F-COST melalui form atau editable table.
-
-Setelah data masuk, user membuka validation page. Jika ada status CHECK, aplikasi menampilkan penyebabnya, misalnya model active belum punya data, total defect category tidak sama dengan total summary, atau sales quantity berbeda antar bagian. User memperbaiki data dari halaman terkait sampai semua validasi penting berstatus OK.
-
-Setelah validasi OK, user membuka report preview. Preview menampilkan layout report dengan data bulan terpilih dan enam bulan terakhir jika data historis tersedia. User kemudian bisa generate PDF atau Excel. File output diberi nama otomatis berdasarkan report type dan bulan, misalnya `QRCC FQMS - LCD SEID Apr 2026.pdf` atau `QRCC Data Presentasi Meeting LCD SEID Apr 2026.xlsx`.
-
-## Rekomendasi tech stack
-
-Stack utama yang direkomendasikan adalah Nuxt sebagai full-stack framework. Nuxt menangani UI, routing, server API, file generation endpoint, dan integrasi database. TypeScript dipakai di seluruh codebase agar schema, query, dan report mapping lebih aman.
-
-Vue menjadi layer UI utama. Untuk komponen, gunakan Nuxt UI 4 karena komponennya terintegrasi dengan ekosistem Nuxt dan cukup cepat untuk kebutuhan internal QRCC. Untuk MVP ini, Nuxt UI 4 adalah pilihan default. Jika ada kebutuhan tampilan report/editor yang sangat custom, tetap usahakan tetap berada dalam pola komponen Nuxt UI 4 agar konsisten.
-
-SQLite menjadi database utama. Untuk penggunaan internal QRCC yang local-first, SQLite sangat cocok karena ringan, tidak butuh server database terpisah, mudah dibackup, dan cukup kuat untuk data bulanan FQMS/F-COST. Jika suatu hari aplikasi berkembang menjadi multi-user atau cloud-hosted, PostgreSQL bisa dipertimbangkan tanpa mengubah konsep data secara besar.
-
-Drizzle ORM dipakai untuk schema dan query. Drizzle cocok karena ringan, TypeScript-friendly, dan membuat struktur database lebih eksplisit. Drizzle migration juga membantu menjaga perubahan schema tetap terkontrol.
-
-Better Auth bisa dipakai jika aplikasi tetap membutuhkan login, walaupun untuk penggunaan internal QRCC. Jika aplikasi hanya berjalan lokal di komputer internal, auth bisa dibuat opsional pada MVP. Namun jika aplikasi di-deploy ke server internal atau jaringan lokal, Better Auth sebaiknya dipakai sejak awal.
-
-ExcelJS dipakai untuk export Excel. Untuk layout report yang mirip file existing, aplikasi sebaiknya membaca template `.xlsx`, mengisi cell/range tertentu, lalu menyimpan file output. Jika template approach kurang fleksibel, ExcelJS juga bisa membuat workbook dari nol, tetapi effort styling akan lebih besar.
-
-SheetJS dipakai untuk import Excel bila diperlukan. Pada MVP, SheetJS bisa ditunda kecuali user ingin paste/import data dari workbook lama. Jika import Excel masuk fase berikutnya, SheetJS membantu membaca workbook, sheet, dan data table menjadi JSON.
-
-Playwright atau Puppeteer dipakai untuk generate PDF. Strategi terbaik adalah membuat halaman report HTML/CSS yang sudah print-friendly, lalu render ke PDF. Dengan pendekatan ini, layout PDF bisa dikontrol melalui CSS, page size, margin, font, border, dan page break.
-
-Zod direkomendasikan untuk validasi input di server route. Komponen table/form dari Nuxt UI 4 menjadi pilihan utama untuk editable grid MVP. Jika data entry menjadi sangat spreadsheet-like, AG Grid Community bisa dipertimbangkan sebagai pengecualian, tetapi untuk MVP sebaiknya mulai dari table/form sederhana yang konsisten dengan Nuxt UI 4.
-
-## Arsitektur aplikasi
-
-Aplikasi dapat dibuat sebagai Nuxt full-stack monolith. Struktur ini paling sederhana untuk penggunaan internal QRCC karena frontend, backend API, database access, dan file generation berada dalam satu project.
-
-Layer UI berada di pages dan components. Halaman utama mencakup dashboard, report months, model master, monthly summary, defect category, non-defect category, repair action, F-COST, validation, report preview, export history, dan settings.
-
-Layer server berada di server/api dan server/services. API route menerima request dari UI, memvalidasi input, lalu memanggil service. Service menangani business logic seperti perhitungan PPM, validasi total, report query, dan export file.
-
-Layer database berada di server/db. Drizzle schema mendefinisikan table, relation, migration, dan query helper. Semua perhitungan yang penting harus mengambil data dari database, bukan dari state UI.
-
-Layer report berada di server/reports. Modul ini menangani transformasi data menjadi view model untuk PDF dan Excel. View model ini penting agar logic report tidak tersebar di komponen UI dan generator file.
-
-Layer template berada di templates. Template Excel dan template HTML/CSS report disimpan terpisah agar mudah diedit tanpa mengganggu schema database.
-
-## Struktur folder awal yang disarankan
+## 4 · Struktur Folder
 
 ```text
-qrcc-fqms-fcost-app/
+qdc/
   app/
-    components/
-    pages/
-    layouts/
-    composables/
+    components/        # Komponen Vue reusable
+    composables/       # State & logic composable
+    layouts/           # Layout halaman (sidebar, dll)
+    pages/             # File-based routing
+    types/             # TypeScript types khusus frontend
+    utils/             # Helper/utility frontend
   server/
-    api/
+    api/               # HTTP endpoint (controller layer)
     db/
-      schema.ts
-      client.ts
-      migrations/
-    services/
-      model.service.ts
-      monthly-summary.service.ts
-      defect-category.service.ts
-      nondefect-category.service.ts
-      repair-action.service.ts
-      fcost.service.ts
-      validation.service.ts
-      report.service.ts
+      schema.ts        # Drizzle table definitions
+      client.ts        # Koneksi SQLite
+      migrations/      # SQL migration files
+    repositories/      # Database access (query layer)
+    services/          # Business logic layer
     reports/
-      pdf/
-      excel/
-      view-models/
-  templates/
-    excel/
-    pdf/
-  storage/
-    exports/
-    backups/
-    imports/
+      pdf/             # HTML/CSS layout untuk PDF
+      excel/           # Logic pengisian template Excel
+      view-models/     # Transform data → report structure
   shared/
-    types/
-    constants/
-    validators/
+    types/             # Types yang dipakai frontend & backend
+    constants/         # Konstanta global
+    validators/        # Zod schema bersama
+  templates/
+    excel/             # File template .xlsx
+    pdf/               # Template HTML/CSS report
+  storage/
+    exports/           # Output PDF/Excel
+    backups/           # Backup database
+    imports/           # File import sementara
 ```
 
-## Data model awal
+---
+
+## 5 · Backend Architecture Pattern
+
+Gunakan pola **API → Service → Repository** (layered architecture).
+
+```
+HTTP Request → API (Controller) → Service → Repository → Database
+```
+
+| Layer | Tanggung Jawab | Dilarang | Nama File |
+|---|---|---|---|
+| **API / Controller** | Terima request, validasi input (Zod), format response JSON | Business logic, akses DB langsung | `*.controller.ts` atau `server/api/**/*.ts` |
+| **Service** | Business logic, rules, kalkulasi, orchestration | Tahu soal HTTP (`req`/`res`), akses DB langsung | `*.service.ts` |
+| **Repository** | CRUD ke database, query Drizzle/SQL | Business logic, format HTTP response | `*.repository.ts` |
+
+**Aturan penting:**
+- Service **tidak boleh** import dari `h3` atau menerima parameter `event`.
+- Repository **tidak boleh** menghitung PPM atau menjalankan validation logic.
+- API handler hanya memanggil service, lalu return response.
+
+---
+
+## 6 · Data Model
+
+### 6.1 report_months
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| month_key | text UNIQUE | Format `YYYYMM`, misal `202604` |
+| month_label | text | Label tampilan, misal `Apr-26` |
+| period_start | text | ISO date awal periode |
+| period_end | text | ISO date akhir periode |
+| status | text | `draft` / `validated` / `exported` / `archived` |
+| created_at | text | ISO timestamp |
+| updated_at | text | ISO timestamp |
+
+### 6.2 models
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| model_name | text | Nama model |
+| model_series | text | Seri (nullable) |
+| product | text | Nama produk |
+| active_status | text | `Active` / `Inactive` |
+| report_include | integer | `1` = masuk report, `0` = tidak |
+| effective_from | text | ISO date nullable |
+| effective_to | text | ISO date nullable |
+| remark | text | Catatan nullable |
+| created_at | text | ISO timestamp |
+| updated_at | text | ISO timestamp |
+
+### 6.3 model_group_rules
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| source_model | text | Model asli (misal `HD1400I`) |
+| report_model | text | Model di report (misal `HD1500I`) |
+| rule_type | text | Tipe aturan |
+| active | integer | `1` / `0` |
+| remark | text | Catatan nullable |
+
+### 6.4 defect_categories
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| code | text UNIQUE | Kode kategori |
+| name | text | Nama: Power Unit, Main Unit, Panel, Software, Other |
+| sort_order | integer | Urutan tampilan |
+| active | integer | `1` / `0` |
+
+### 6.5 nondefect_categories
+
+Struktur sama dengan `defect_categories`. Contoh nama: User Usage, Setting, Explanation, Signal.
+
+### 6.6 monthly_model_summaries
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| report_month_id | integer FK | → report_months.id |
+| model_id | integer FK | → models.id |
+| sales_period | text | Periode penjualan |
+| sales_qty | integer | Jumlah sales |
+| total_defect_qty | integer | Total defect |
+| total_nondefect_qty | integer | Total non-defect |
+| defect_ppm | real | PPM defect (calculated) |
+| nondefect_ppm | real | PPM non-defect (calculated) |
+| remark | text | Catatan nullable |
+| created_at | text | ISO timestamp |
+| updated_at | text | ISO timestamp |
+
+**Constraint:** `UNIQUE(report_month_id, model_id)`
+
+### 6.7 defect_category_entries
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| report_month_id | integer FK | → report_months.id |
+| model_id | integer FK | → models.id |
+| category_id | integer FK | → defect_categories.id |
+| qty | integer | Jumlah |
+| sales_qty_snapshot | integer | Snapshot sales qty saat input (audit) |
+| ppm | real | Calculated |
+| remark | text | Catatan nullable |
+
+**Constraint:** `UNIQUE(report_month_id, model_id, category_id)`
+
+### 6.8 nondefect_category_entries
+
+Struktur sama dengan `defect_category_entries`, FK `category_id` → `nondefect_categories.id`.
+
+### 6.9 repair_action_entries
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| report_month_id | integer FK | → report_months.id |
+| model_id | integer FK | → models.id |
+| repair_action | text | Nama action |
+| qty | integer | Jumlah |
+| total | integer | Total |
+| defect_occup | real | Defect occupation |
+| defect_ppm | real | PPM |
+| remark | text | Catatan nullable |
+
+### 6.10 fcost_entries
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| report_month_id | integer FK | → report_months.id |
+| sales_amount | real | Nilai penjualan |
+| sales_qty | integer | Jumlah unit |
+| fcost_amount | real | Nilai F-COST |
+| fcost_qty | integer | Jumlah unit F-COST |
+| target_ratio | real | Target rasio |
+| actual_ratio | real | Rasio aktual |
+| last_year_result | real | Hasil tahun lalu |
+| remark | text | Catatan nullable |
+
+### 6.11 validation_runs
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| report_month_id | integer FK | → report_months.id |
+| status | text | `OK` / `CHECK` |
+| checked_at | text | ISO timestamp |
+| summary_json | text | JSON snapshot hasil validasi |
+
+### 6.12 export_jobs
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| report_month_id | integer FK | → report_months.id |
+| type | text | `pdf` / `excel` |
+| file_name | text | Nama file output |
+| file_path | text | Path file |
+| status | text | `pending` / `done` / `error` |
+| created_at | text | ISO timestamp |
+| message | text | Pesan error nullable |
+
+---
+
+## 7 · Aturan Perhitungan
+
+| Aturan | Formula / Ketentuan |
+|---|---|
+| **PPM** | `qty / sales_qty × 1.000.000` |
+| **PPM saat sales_qty = 0** | Tampilkan `CHECK`, jangan tampilkan angka PPM |
+| **Total defect category** | Σ `defect_category_entries.qty` per model per bulan **harus =** `monthly_model_summaries.total_defect_qty` |
+| **Total nondefect category** | Σ `nondefect_category_entries.qty` per model per bulan **harus =** `monthly_model_summaries.total_nondefect_qty` |
+| **Sales qty sumber utama** | `monthly_model_summaries.sales_qty`. Field `sales_qty_snapshot` di entries hanya untuk audit. |
+| **Grouping model** | Saat render report, gabungkan data berdasarkan `model_group_rules`. Data original tetap terpisah di DB. |
+
+---
+
+## 8 · Validation Rules
+
+Semua validasi menghasilkan status **OK** atau **CHECK** + alasan + link ke data.
+
+| # | Rule | Deskripsi |
+|---|---|---|
+| V1 | Active model completeness | Semua model `active=1, report_include=1` harus punya summary di bulan terpilih |
+| V2 | Duplicate summary | Tidak boleh >1 summary untuk kombinasi bulan + model |
+| V3 | Defect total match | Σ defect entries = total_defect_qty di summary |
+| V4 | Non-defect total match | Σ non-defect entries = total_nondefect_qty di summary |
+| V5 | Sales qty presence | Model dengan qty > 0 harus punya sales_qty > 0 |
+| V6 | Category standardization | Semua entries harus pakai category_id dari reference table |
+| V7 | Report month consistency | Semua data report harus dari bulan yang sama |
+| V8 | F-COST completeness | Jika report F-COST aktif, data F-COST harus tersedia |
+
+---
+
+## 9 · UI Page Map
+
+| Route | Fungsi |
+|---|---|
+| `/` | Dashboard: bulan aktif, status validasi, shortcut, tombol generate |
+| `/report-months` | Daftar bulan laporan + status |
+| `/models` | Master model (CRUD + filter active) |
+| `/references/defect-categories` | Reference defect categories |
+| `/references/nondefect-categories` | Reference non-defect categories |
+| `/references/grouping-rules` | Aturan grouping model |
+| `/entry/summary` | Input monthly model summary |
+| `/entry/defect` | Input defect category per model |
+| `/entry/nondefect` | Input non-defect category per model |
+| `/entry/repair-action` | Input repair action per model |
+| `/entry/fcost` | Input F-COST bulanan |
+| `/validation` | Status validasi OK/CHECK + link perbaikan |
+| `/reports/preview` | Preview report (sumber layout PDF) |
+| `/reports/export` | Export PDF / Excel + history |
+| `/settings/backup` | Backup / restore database |
+
+**Prinsip dashboard:** Harus langsung menjawab 3 hal → bulan apa yang aktif, data apa yang belum lengkap, langkah berikutnya apa.
+
+---
+
+## 10 · Report Specification
+
+### PDF
+- Dibuat dari **HTML/CSS print layout** via Playwright.
+- Route preview (`/reports/fqms/:month/preview`) = sumber layout yang sama untuk preview UI dan PDF output.
+- Section: Cover/Header, Quality Trend, Acceptance Ratio, Model Detail, Defect Category, Repair Action, F-COST.
+- Nama file otomatis: `QRCC FQMS - LCD SEID Apr 2026.pdf`
+
+### Excel
+- Pendekatan **template workbook** — isi cell/named range dari view model data.
+- Template terpisah per jenis: `job4-presentation-template.xlsx`, `fqms-product-template.xlsx`, `fcost-template.xlsx`.
+- MVP mulai dari **1 template** yang paling sering dipakai.
+- Nama file otomatis: `QRCC Data Presentasi Meeting LCD SEID Apr 2026.xlsx`
+
+---
+
+## 11 · Roadmap Implementasi
+
+> **Urutan: Frontend dulu → Backend menyusul.**
+> Setiap phase harus selesai dan di-merge sebelum lanjut ke phase berikutnya.
+
+### Phase 0 — Discovery & Persiapan
+- [ ] Audit dashboard template yang sudah ada
+- [ ] Identifikasi komponen Nuxt UI 4 yang bisa dipakai ulang
+- [ ] Tentukan menu baru untuk domain FQMS/F-COST
+- [ ] Kumpulkan contoh output Excel/PDF referensi
+
+### Phase 1 — UI Shell & Identity (Frontend)
+- [ ] Update app metadata: title `QRCC Data Center`, description, favicon
+- [ ] Rombak sidebar/navigation sesuai page map (Section 9)
+- [ ] Buat layout utama baru (sidebar + content area)
+- [ ] Buat halaman dashboard kosong dengan placeholder cards
+- [ ] Setup tema/warna identitas QRCC
+- [ ] Hapus halaman demo lama (customers, inbox)
+
+### Phase 2 — Halaman Master Data UI (Frontend)
+- [ ] Halaman `/report-months` — tabel + form create/edit
+- [ ] Halaman `/models` — tabel + search + filter active + form drawer
+- [ ] Halaman `/references/defect-categories` — tabel + form
+- [ ] Halaman `/references/nondefect-categories` — tabel + form
+- [ ] Halaman `/references/grouping-rules` — tabel + form
+- [ ] Semua halaman pakai mock data / composable state dulu
+
+### Phase 3 — Halaman Data Entry UI (Frontend)
+- [ ] Halaman `/entry/summary` — editable table per bulan
+- [ ] Halaman `/entry/defect` — editable table per model × category
+- [ ] Halaman `/entry/nondefect` — editable table per model × category
+- [ ] Halaman `/entry/repair-action` — editable table
+- [ ] Halaman `/entry/fcost` — form / editable table
+- [ ] Semua support edit cepat, highlight error, dan month selector
+
+### Phase 4 — Halaman Validation & Report UI (Frontend)
+- [ ] Halaman `/validation` — daftar check dengan status OK/CHECK (mock)
+- [ ] Halaman `/reports/preview` — layout report HTML/CSS
+- [ ] Halaman `/reports/export` — tombol export + daftar history
+- [ ] Halaman `/settings/backup` — tombol backup/restore
+
+### Phase 5 — Database Core (Backend)
+- [ ] Setup Drizzle + SQLite connection
+- [ ] Definisikan semua schema table (Section 6)
+- [ ] Buat migration awal
+- [ ] Seed reference categories (defect, non-defect)
+- [ ] Buat repository layer untuk semua entitas
+
+### Phase 6 — API & Service Layer (Backend)
+- [ ] CRUD API + Service untuk report_months
+- [ ] CRUD API + Service untuk models
+- [ ] CRUD API + Service untuk defect_categories & nondefect_categories
+- [ ] CRUD API + Service untuk model_group_rules
+- [ ] CRUD API + Service untuk monthly_model_summaries
+- [ ] CRUD API + Service untuk defect/nondefect entries
+- [ ] CRUD API + Service untuk repair_action_entries
+- [ ] CRUD API + Service untuk fcost_entries
+
+### Phase 7 — Integrasi Frontend ↔ Backend
+- [ ] Ganti mock data di semua halaman frontend dengan API calls
+- [ ] Wiring composables → useFetch / useAsyncData ke API routes
+- [ ] Pastikan CRUD end-to-end berfungsi di setiap halaman
+
+### Phase 8 — Validation Engine (Backend)
+- [ ] Implement semua validation rules (Section 8: V1–V8)
+- [ ] API endpoint `/api/validation/run`
+- [ ] Simpan hasil ke validation_runs
+- [ ] Wiring ke halaman `/validation` — ganti mock dengan data real
+
+### Phase 9 — Report View Model & Preview
+- [ ] Buat report builder service: transform long-format → report view model
+- [ ] Mapping grouping model
+- [ ] Data 6 bulan terakhir (jika tersedia)
+- [ ] Wiring ke halaman `/reports/preview`
+
+### Phase 10 — Export PDF
+- [ ] Layout print-friendly HTML/CSS untuk report
+- [ ] Endpoint export PDF via Playwright
+- [ ] Auto-naming file output
+- [ ] Simpan ke export_jobs
+
+### Phase 11 — Export Excel
+- [ ] Siapkan template `.xlsx`
+- [ ] Mapping data → cell/range via ExcelJS
+- [ ] Endpoint export Excel
+- [ ] Simpan ke export_jobs
+
+### Phase 12 — Backup / Restore
+- [ ] Endpoint export backup database SQLite
+- [ ] Endpoint restore dari file backup
+- [ ] UI tombol di `/settings/backup`
+
+### Phase 13 — Polish & Finishing
+- [ ] Dashboard trend & ringkasan data
+- [ ] Export history di `/reports/export`
+- [ ] Empty state & error state yang informatif
+- [ ] Shortcut keyboard untuk data entry
+- [ ] Optimasi performa query
+
+---
+
+## 12 · Scope MVP vs Out of Scope
+
+### ✅ Masuk MVP
+- CRUD semua entitas data (Section 6)
+- Validation engine 8 rules (Section 8)
+- Report preview dari database
+- Export PDF 1 report utama
+- Export Excel 1 template utama
+- Backup / restore database
+
+### ❌ Tidak masuk MVP
+- Import otomatis dari workbook historis lama
+- Role-based approval / multi-user permission
+- Cloud sync / real-time collaboration
+- Automated email sending
+- AI insight / advanced dashboard
+- Full historical migration
+- Power Query replacement
+
+---
+
+## 13 · Acceptance Criteria MVP
+
+MVP **selesai** jika user dapat menjalankan **1 siklus bulanan penuh** tanpa membuka Excel sebagai pusat kerja:
+
+1. ✅ Membuat bulan laporan baru
+2. ✅ Mengelola master model
+3. ✅ Input summary, defect, non-defect, repair action, F-COST
+4. ✅ Menjalankan validasi → semua status utama OK
+5. ✅ Preview report
+6. ✅ Export PDF
+7. ✅ Export Excel
+8. ✅ Backup database
+
+---
+
+## 14 · Fiscal Calendar (Japanese Corporate)
+
+| Term | Period |
+|---|---|
+| **FH** (First Half) | 1 April – 30 September |
+| **LH** (Last Half) | 1 October – 31 March |
+| **Label** | Tahun kalender dari April (awal FY) |
+
+Contoh:
+- `2025FH` = 1 Apr 2025 – 30 Sep 2025
+- `2025LH` = 1 Oct 2025 – 31 Mar 2026
+
+---
+
+## 15 · Git Workflow
 
-Table `report_months` menyimpan bulan laporan. Field minimal: `id`, `month_key`, `month_label`, `period_start`, `period_end`, `status`, `created_at`, dan `updated_at`. `month_key` sebaiknya memakai format stabil seperti `202604`, sedangkan label bisa `Apr-26` atau `April 2026`.
-
-Table `models` menyimpan master model. Field minimal: `id`, `model_name`, `model_series`, `product`, `active_status`, `report_include`, `effective_from`, `effective_to`, `remark`, `created_at`, dan `updated_at`.
-
-Table `model_group_rules` menyimpan aturan grouping khusus. Field minimal: `id`, `source_model`, `report_model`, `rule_type`, `active`, dan `remark`. Contohnya, source `HD1400I` dapat masuk ke report model `HD1500I`.
-
-Table `defect_categories` menyimpan kategori defect standar. Field minimal: `id`, `code`, `name`, `sort_order`, dan `active`. Contoh kategori: Power Unit, Main Unit, Panel, Software, Other.
-
-Table `nondefect_categories` menyimpan kategori non-defect standar. Field minimal: `id`, `code`, `name`, `sort_order`, dan `active`.
-
-Table `monthly_model_summaries` menyimpan summary per bulan dan model. Field minimal: `id`, `report_month_id`, `model_id`, `sales_period`, `sales_qty`, `total_defect_qty`, `total_nondefect_qty`, `defect_ppm`, `nondefect_ppm`, `remark`, `created_at`, dan `updated_at`. Kombinasi `report_month_id` dan `model_id` harus unik.
-
-Table `defect_category_entries` menyimpan defect per kategori. Field minimal: `id`, `report_month_id`, `model_id`, `category_id`, `qty`, `sales_qty_snapshot`, `ppm`, dan `remark`. Kombinasi `report_month_id`, `model_id`, dan `category_id` harus unik.
-
-Table `nondefect_category_entries` menyimpan non-defect per kategori. Field minimal: `id`, `report_month_id`, `model_id`, `category_id`, `qty`, `sales_qty_snapshot`, `ppm`, dan `remark`.
-
-Table `repair_action_entries` menyimpan repair action. Field minimal: `id`, `report_month_id`, `model_id`, `repair_action`, `qty`, `total`, `defect_occup`, `defect_ppm`, dan `remark`.
-
-Table `fcost_entries` menyimpan F-COST bulanan. Field minimal: `id`, `report_month_id`, `sales_amount`, `sales_qty`, `fcost_amount`, `fcost_qty`, `target_ratio`, `actual_ratio`, `last_year_result`, dan `remark`.
-
-Table `validation_runs` menyimpan hasil validasi. Field minimal: `id`, `report_month_id`, `status`, `checked_at`, dan `summary_json`. Untuk MVP, validation result juga bisa dihitung real-time tanpa disimpan, tetapi menyimpan snapshot membantu audit.
-
-Table `export_jobs` menyimpan riwayat export. Field minimal: `id`, `report_month_id`, `type`, `file_name`, `file_path`, `status`, `created_at`, dan `message`.
-
-## Aturan perhitungan
-
-PPM dihitung dengan rumus `qty / sales_qty * 1,000,000`. Jika sales quantity kosong atau nol, PPM harus ditampilkan sebagai kosong, nol, atau status CHECK sesuai keputusan produk. Untuk menghindari angka yang menyesatkan, lebih aman menampilkan CHECK jika qty ada tetapi sales quantity nol.
-
-Total defect category per model dan bulan harus sama dengan `total_defect_qty` pada monthly summary. Total non-defect category per model dan bulan harus sama dengan `total_nondefect_qty`. Jika tidak sama, report masih boleh dipreview tetapi export final sebaiknya memberi warning besar atau dikunci sampai user override secara sadar.
-
-Sales quantity harus konsisten. Jika sales quantity digunakan di summary, category, dan report, sumber utama harus `monthly_model_summaries.sales_qty`. Field `sales_qty_snapshot` pada category entry boleh ada untuk audit atau performa, tetapi tidak boleh menjadi sumber utama jika berbeda dari summary.
-
-Report model harus mengikuti grouping rule. Jika ada model yang secara data original berbeda tetapi harus tampil sebagai satu model series pada report, aplikasi harus menyatukan data saat membuat report view model, bukan menghapus detail original.
-
-## Validation rules MVP
-
-Validation pertama adalah active model completeness. Semua model dengan `active_status = Active` dan `report_include = true` harus memiliki summary untuk report month terpilih.
-
-Validation kedua adalah duplicate summary. Tidak boleh ada lebih dari satu summary untuk kombinasi report month dan model.
-
-Validation ketiga adalah defect total matching. Jumlah semua defect category entries untuk model dan bulan harus sama dengan total defect quantity pada summary.
-
-Validation keempat adalah non-defect total matching. Jumlah semua non-defect category entries untuk model dan bulan harus sama dengan total non-defect quantity pada summary.
-
-Validation kelima adalah sales quantity presence. Model yang memiliki defect atau non-defect quantity harus memiliki sales quantity yang valid.
-
-Validation keenam adalah category standardization. Semua category entry harus memakai category id dari reference table, bukan free text yang bisa berbeda penulisan.
-
-Validation ketujuh adalah report month consistency. Semua data yang dipakai report harus berasal dari report month yang sama, kecuali bagian trend yang memang mengambil beberapa bulan historis.
-
-Validation kedelapan adalah F-COST completeness. Jika report F-COST diaktifkan untuk bulan tersebut, data F-COST wajib tersedia.
-
-## Report PDF MVP
-
-PDF MVP harus dibuat dari HTML/CSS print layout. Aplikasi membuat route preview, misalnya `/reports/fqms/:month/preview`, lalu Playwright membuka route tersebut secara server-side dan menyimpannya sebagai PDF. Dengan cara ini, tampilan preview dan output PDF berasal dari sumber layout yang sama.
-
-PDF harus memiliki ukuran halaman, margin, font, border, table style, dan page break yang konsisten. Untuk awal, gunakan layout yang mendekati Excel report, lalu sempurnakan berdasarkan hasil print. Komponen report sebaiknya dipisahkan menjadi section seperti cover/header, quality trend, acceptance ratio, model detail, defect category, repair action, dan F-COST.
-
-PDF export harus menerima parameter report month dan report type. Output file harus dinamai otomatis dan masuk ke folder export aplikasi. Setelah export selesai, user bisa membuka atau menyimpan file tersebut.
-
-## Export Excel MVP
-
-Excel export MVP sebaiknya menggunakan template workbook. Template berisi layout report, merged cells, border, style, print area, dan sheet structure. Aplikasi hanya mengisi cell atau named range dengan data dari report view model.
-
-Pendekatan template mengurangi risiko perbedaan tampilan karena styling sudah dibuat di Excel. ExcelJS dapat membuka template, mengisi cell, menambah row jika dibutuhkan, lalu menyimpan workbook baru. Untuk report tabel yang jumlah barisnya berubah, template perlu menyediakan area dinamis atau aplikasi perlu melakukan insert row dengan style copy.
-
-Jika report harus mendukung banyak jenis output, pisahkan template menjadi `job4-presentation-template.xlsx`, `fqms-product-template.xlsx`, dan `fcost-template.xlsx`. Untuk MVP, cukup mulai dari satu template report yang paling sering dipakai.
-
-## UI MVP
-
-Halaman dashboard menampilkan report month aktif, status validasi terakhir, shortcut ke input data, dan tombol generate report. Karena tujuan aplikasi adalah produktivitas, dashboard harus langsung menjawab: bulan apa yang sedang dikerjakan, data apa yang belum lengkap, dan tombol apa yang harus ditekan berikutnya.
-
-Halaman report months memungkinkan user membuat bulan baru, menandai bulan sebagai draft, validated, exported, atau archived. Status ini membantu membedakan bulan yang masih dikerjakan dan bulan yang sudah final.
-
-Halaman master data berisi model, kategori defect, kategori non-defect, dan grouping rule. UI bisa dibuat dengan table sederhana, search, filter active, dan form edit drawer/modal.
-
-Halaman data entry berisi monthly summary, defect category, non-defect category, repair action, dan F-COST. Untuk MVP, masing-masing bisa menjadi tab. Table harus mendukung edit cepat, copy-paste dari spreadsheet jika memungkinkan, dan highlight error.
-
-Halaman validation menampilkan daftar checks dengan status OK/CHECK, expected value, actual value, selisih, dan link ke data yang perlu diperbaiki.
-
-Halaman report preview menampilkan layout report. Tombol export PDF dan export Excel ditempatkan di halaman ini, tetapi jika validasi belum OK, tombol bisa menampilkan warning.
-
-Halaman settings berisi lokasi export, backup database, restore database, dan preferensi format bulan.
-
-## Copywriting dan metadata app
-
-Karena aplikasi ini adalah bagian dari sistem QRCC, seluruh copywriting, metadata, title, description, menu, empty state, dan export naming harus mengarah ke identitas QRCC Data Center. Judul aplikasi direkomendasikan memakai `QRCC Data Center`, dengan subtitle atau deskripsi yang menjelaskan bahwa modul ini menangani FQMS, F-COST, PPM, Sales, dan Quality Issue workflow.
-
-Contoh metadata awal: title `QRCC Data Center`; description `Aplikasi dashboard internal QRCC untuk mengelola workflow FQMS, F-COST, PPM, Sales, Quality Issue, validasi data bulanan, dan report generation.` Menu utama juga harus memakai istilah domain QRCC, seperti Market Quality, F-Cost, Sales, Report Month, Validation, Report Preview, Export, dan Settings.
-
-## Acceptance criteria MVP
-
-MVP dianggap berhasil jika user dapat membuat report month baru, mengelola master model, menginput summary, defect category, non-defect category, repair action, dan F-COST untuk satu bulan, menjalankan validasi sampai status utama OK, melihat preview report, menghasilkan PDF, menghasilkan Excel, dan membuat backup database.
-
-MVP juga dianggap berhasil jika total defect dan non-defect pada report selalu berasal dari database yang sama dan tidak perlu copy-paste antar workbook. User harus bisa menyelesaikan proses utama dengan jauh lebih sedikit langkah dibanding workflow Excel lama.
-
-## Roadmap implementasi
-
-Phase 0 adalah discovery dan template capture. Pada fase ini, kumpulkan contoh report Excel final, tentukan sheet/section yang wajib ditiru, definisikan field utama, dan pilih apakah MVP pertama meniru Job 4, Job 5, atau gabungan minimal keduanya.
-
-Phase 1 adalah project setup. Buat project Nuxt + TypeScript, pilih UI library, setup SQLite, Drizzle, migration, layout dasar, dan halaman dashboard kosong.
-
-Phase 2 adalah database core. Implementasikan schema report months, models, category references, monthly summaries, defect entries, non-defect entries, repair action, dan F-COST. Tambahkan seed data untuk kategori standar.
-
-Phase 3 adalah CRUD core. Buat halaman dan API untuk master model, report month, monthly summary, defect category, non-defect category, repair action, dan F-COST.
-
-Phase 4 adalah validation engine. Buat service validasi, halaman validation, status OK/CHECK, dan link ke data bermasalah.
-
-Phase 5 adalah report view model. Buat query yang mengubah database long-format menjadi struktur yang siap ditampilkan di report, termasuk grouping model dan enam bulan terakhir bila data tersedia.
-
-Phase 6 adalah PDF preview dan export. Buat template HTML/CSS report, preview page, dan endpoint export PDF dengan Playwright/Puppeteer.
-
-Phase 7 adalah Excel export. Siapkan template `.xlsx`, mapping cell/range, dan endpoint export Excel dengan ExcelJS.
-
-Phase 8 adalah backup/restore. Tambahkan export database backup, restore, dan dokumentasi penggunaan internal QRCC.
-
-Phase 9 adalah import lanjutan opsional. Setelah MVP stabil, tambahkan import otomatis dari workbook lama menggunakan SheetJS, dimulai dari file yang paling sering dipakai atau format yang paling stabil.
-
-Phase 10 adalah polish. Tambahkan dashboard trend, export history, data duplicate detection lebih detail, shortcut keyboard, dan optimasi data entry.
-
-## Risiko dan mitigasi
-
-Risiko pertama adalah layout PDF/Excel tidak langsung identik dengan report Excel lama. Mitigasinya adalah memakai template Excel untuk output Excel dan HTML print layout yang disempurnakan bertahap untuk PDF.
-
-Risiko kedua adalah data model terlalu cepat dibuat kompleks. Mitigasinya adalah mulai dari field yang sudah jelas dipakai report, lalu tambah field setelah ada kebutuhan nyata.
-
-Risiko ketiga adalah import Excel lama memakan waktu terlalu besar. Mitigasinya adalah menunda import otomatis penuh dari MVP dan menyediakan input manual/paste-friendly terlebih dahulu.
-
-Risiko keempat adalah aplikasi internal QRCC menjadi sulit dipindahkan karena file database lokal. Mitigasinya adalah backup/restore wajib ada sejak MVP.
-
-Risiko kelima adalah report menghasilkan angka yang salah karena grouping atau category mapping. Mitigasinya adalah menjadikan grouping dan category sebagai reference table yang terlihat di UI, serta membuat validation page yang eksplisit.
-
-## Keputusan teknis yang direkomendasikan
-
-Gunakan Nuxt full-stack monolith, bukan frontend dan backend terpisah, karena target awal adalah penggunaan internal QRCC dan produktivitas. Gunakan SQLite lokal sebagai database utama. Gunakan Drizzle untuk schema dan migration. Gunakan Nuxt UI 4 untuk mempercepat MVP. Gunakan Playwright untuk PDF karena hasil print dari HTML lebih mudah dikontrol. Gunakan ExcelJS dengan template workbook untuk export Excel.
-
-Auth bisa dibuat opsional untuk local-only MVP. Jika aplikasi akan dijalankan di server atau dibuka dari perangkat lain, gunakan Better Auth sejak awal.
-
-## Definisi selesai untuk MVP
-
-MVP selesai ketika aplikasi bisa dipakai untuk satu siklus report bulanan dari awal sampai output. Satu siklus berarti user dapat membuat bulan laporan, input data utama, melihat validasi, memperbaiki error, preview report, export PDF, export Excel, dan backup database. Jika semua itu bisa dilakukan tanpa membuka database Excel lama sebagai pusat kerja, maka MVP sudah memenuhi tujuan utama.
-
-## Catatan untuk project baru
-
-Project baru sebaiknya tidak dimulai dengan membuat semua fitur sekaligus. Mulailah dari database schema dan satu report paling penting. Setelah satu report berhasil dari input sampai PDF/Excel, baru perluas ke section lain. Jangan mulai dari dashboard besar atau import semua file historis, karena itu bisa membuat scope terlalu lebar sebelum core workflow terbukti.
-
-Prioritas pertama adalah membuat workflow bulanan terasa pendek. Jika aplikasi membuat user harus melakukan terlalu banyak klik atau input berulang, berarti produk belum menyelesaikan masalah utama. Setiap fitur harus diuji dengan pertanyaan: apakah ini mengurangi pekerjaan bulanan, mengurangi risiko salah angka, atau membuat output lebih cepat siap meeting? Jika tidak, fitur tersebut bisa ditunda.
-
-## GIT WORKFLOW
 ```
 Main branch:    main
-Feature branch: feature/feature-name
-Bugfix branch:  bugfix/bug-name
+Feature branch: feature/<nama-fitur>
+Bugfix branch:  bugfix/<nama-bug>
 
-Commit message format:
-- feat:     Add feature X
-- fix:      Fix bug Y
-- docs:     Update documentation
-- refactor: Refactor module Z
-- test:     Add test for X
+Commit message:
+  feat:     Tambah fitur X
+  fix:      Perbaiki bug Y
+  docs:     Update dokumentasi
+  refactor: Refactor modul Z
+  test:     Tambah test untuk X
 ```
 
-## Fiscal Calendar Definition (Japanese Corporate):
-- FH (First Half) = 1 April – 30 September
-- LH (Last Half) = 1 October – 31 March
-- Fiscal year label = calendar year of April (start of FY), contoh :
-  - `2025FH` = 1 Apr 2025 – 30 Sep 2025
-  - `2025LH` = 1 Oct 2025 – 31 Mar 2026
+---
 
+## 16 · Risiko & Mitigasi
 
-## Pattern untuk Backend
+| Risiko | Mitigasi |
+|---|---|
+| Layout PDF/Excel tidak mirip report lama | Pakai template Excel + HTML print layout, iterasi dari output nyata |
+| Data model terlalu cepat kompleks | Mulai dari field yang jelas dipakai report, tambah sesuai kebutuhan |
+| Import Excel lama memakan waktu besar | Tunda import otomatis, sediakan input manual dulu |
+| Database lokal hilang | Backup/restore wajib ada sejak MVP |
+| Angka report salah karena grouping | Grouping sebagai reference table eksplisit + validation page |
+| Scope melebar terlalu cepat | Fokus 1 alur kerja sampai selesai sebelum perluas |
 
-- Gunakan Pattern API → Service → Repository (a.k.a. layered/clean architecture)
+---
 
-- **API Layer (Controller/Handler)**
-Menerima HTTP request, validasi input (format, required fields), lalu panggil service. Kembalikan response dalam format JSON. Layer ini tidak boleh punya business logic.
+## 17 · Glossary
 
-- **Service Layer**
-Tempat semua business logic tinggal — aturan bisnis, kalkulasi, kondisi, orchestration antar-repository. Layer ini tidak tahu soal HTTP (tidak kenal req/res), dan tidak langsung akses database.
-
-- **Repository Layer**
-Satu-satunya layer yang boleh bicara dengan database. Berisi fungsi-fungsi seperti findById, create, update, delete. Kalau besok ganti dari PostgreSQL ke MongoDB, cukup ubah layer ini saja.
-
-| Layer	| Tanggung jawab | Dilarang |	Contoh nama file |
-| ------ | ------ | ---- | --- |
-| API / Controller |	Terima request, validasi input, format response	| Business logic, akses DB langsung	| user.controller.ts |
-| Service |	Business logic, rules, orchestration | Tahu soal HTTP, akses DB langsung | user.service.ts |
-| Repository | CRUD ke database, query ORM/SQL | Business logic, format HTTP response |	user.repository.ts |
+| Istilah | Definisi |
+|---|---|
+| **FQMS** | Field Quality Management System — sistem tracking kualitas produk di pasar |
+| **F-COST** | Failure Cost — biaya yang timbul dari klaim kualitas |
+| **PPM** | Parts Per Million — metrik kualitas (qty / sales × 1.000.000) |
+| **Report Month** | Bulan laporan yang sedang dikerjakan (format YYYYMM) |
+| **Monthly Summary** | Ringkasan data per model per bulan: sales, defect, non-defect |
+| **Defect Category** | Klasifikasi defect: Power Unit, Main Unit, Panel, Software, Other |
+| **Non-defect Category** | Klasifikasi non-defect: User Usage, Setting, Explanation, Signal |
+| **Repair Action** | Tindakan perbaikan yang dilakukan terhadap defect |
+| **Model Group Rule** | Aturan penggabungan model di report (misal HD1400I → HD1500I) |
+| **View Model** | Struktur data yang sudah ditransformasi dari DB ke format siap report |
+| **Long-format** | Data disimpan sebagai baris per record (DB storage) |
+| **Wide-format** | Data disusun sebagai kolom per bulan (report layout) |
+| **QRCC** | Quality Reliability Control Center |
