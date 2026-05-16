@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { format, isToday } from 'date-fns'
+import type { ComponentPublicInstance } from 'vue'
 import type { Mail } from '~/types'
 
 const props = defineProps<{
@@ -7,6 +8,14 @@ const props = defineProps<{
 }>()
 
 const mailsRefs = ref<Element[]>([])
+
+const setMailRef = (id: number) => (el: Element | ComponentPublicInstance | null) => {
+  const element = el instanceof Element ? el : el?.$el
+
+  if (element instanceof Element) {
+    mailsRefs.value[id] = element
+  }
+}
 
 const selectedMail = defineModel<Mail | null>()
 
@@ -47,7 +56,7 @@ defineShortcuts({
     <div
       v-for="(mail, index) in mails"
       :key="index"
-      :ref="el => { mailsRefs[mail.id] = el as Element }"
+      :ref="setMailRef(mail.id)"
     >
       <div
         class="p-4 sm:px-6 text-sm cursor-pointer border-l-2 transition-colors"
