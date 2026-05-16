@@ -1,14 +1,22 @@
 # QRCC Data Center
 
-is a Web Application dashboard for QRCC data center consist PPM, F-Cost, Sales, User Claim, Improvement etc.
+QRCC Data Center adalah aplikasi dashboard internal untuk mengelola workflow bulanan FQMS/F-COST, termasuk PPM, sales, defect/non-defect, repair action, validasi data, preview report, export PDF/Excel, dan backup database.
 
-Created with the Nuxt dashboard template with multiple pages, collapsible sidebar, keyboard shortcuts, light & dark more, command palette and more, powered by [Nuxt UI](https://ui.nuxt.com).
+Sumber kebenaran utama produk ada di [prd.md](prd.md). Dokumen tambahan di [.doc/](.doc/) berfungsi sebagai discovery notes, arsip PRD panjang, dan supporting plan yang mengikuti keputusan di [prd.md](prd.md).
 
-## Quick Start
+## Tech Stack
+
+- Nuxt 4 full-stack monolith
+- Vue 3 + TypeScript strict
+- Nuxt UI 4
+- SQLite + Drizzle ORM
+- Zod untuk validasi input server-side
+- ExcelJS untuk export Excel berbasis template
+- Playwright untuk export PDF dari HTML/CSS print layout
 
 ## Setup
 
-Make sure to install the dependencies:
+Install dependencies:
 
 ```bash
 npm install
@@ -16,7 +24,7 @@ npm install
 
 ## Development Server
 
-Start the development server on `http://localhost:3000`:
+Start development server:
 
 ```bash
 npm run dev
@@ -24,19 +32,21 @@ npm run dev
 
 ## Production
 
-Build the application for production:
+Build for production:
 
 ```bash
 npm run build
 ```
 
-Locally preview production build:
+Preview production build locally:
 
 ```bash
 npm run preview
-
 ```
 
-## Renovate integration
+## Project Docs
 
-Install [Renovate GitHub app](https://github.com/apps/renovate/installations/select_target) on your repository and you are good to go.
+- [prd.md](prd.md) — PRD utama dan single source of truth.
+- [.doc/prd-long.md](.doc/prd-long.md) — versi PRD panjang untuk konteks tambahan.
+- [.doc/phase-0-discovery.md](.doc/phase-0-discovery.md) — hasil discovery template, FQMS, dan F-COST.
+- [.doc/system-design-mvp-plan.md](.doc/system-design-mvp-plan.md) — supporting plan arsitektur dan fase MVP.

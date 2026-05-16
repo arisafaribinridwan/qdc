@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Laporan Bulanan F-Cost</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chosen Palette: Corporate Slate & Professional Teal -->
+    <!-- Application Structure Plan:
+        Struktur diatur ulang untuk mengutamakan keterbacaan tabel utama secara horizontal.
+        1. Top Row: KPI Cards untuk ringkasan cepat.
+        2. Middle Row: Tabel Monthly Performance yang memanjang penuh (12-column grid) agar kolom 2025FH hingga 2025LH terlihat utuh tanpa scroll.
+        3. Bottom Row: Grid dua kolom yang diseimbangkan tingginya untuk menyelaraskan grafik tren (kiri) dengan detail breakdown LCD dan part (kanan).
+        Struktur ini memastikan aliran data dari 'Ringkasan -> Detail Waktu -> Akar Masalah' berjalan linier.
+    -->
+    <!-- Visualization & Content Choices:
+        - Monthly Table: Lebar penuh dengan font 11px agar muat di resolusi standar/cetak A4.
+        - Trend Line Chart: Di sisi kiri bawah untuk melihat history.
+        - Donut Chart & Side Table: Untuk detail biaya LCD (Part/Labor/Trip) sesuai image_adda7e.png.
+        - Konfirmasi: TIDAK menggunakan SVG atau Mermaid JS.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            color: #334155;
+            padding: 20px;
+        }
+
+        .a4-landscape {
+            width: 100%;
+            max-width: 1280px;
+            margin: 0 auto;
+            background: white;
+            padding: 24px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        .chart-box {
+            height: 300px;
+            position: relative;
+        }
+
+        .table-standard th {
+            background-color: #1e3a8a;
+            color: white;
+            font-size: 11px;
+            padding: 10px 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        .table-standard td {
+            font-size: 11px;
+            padding: 8px 4px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: right;
+        }
+
+        .table-standard tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        .label-cell {
+            text-align: left !important;
+            font-weight: 600;
+            color: #475569;
+            width: 140px;
+        }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .a4-landscape { box-shadow: none; max-width: 100%; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="a4-landscape">
+        <!-- Header Section -->
+        <div class="flex justify-between items-start mb-6 border-b-2 border-slate-100 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800">MONTHLY F-COST PERFORMANCE REPORT</h1>
+                <p class="text-sm text-slate-500 uppercase tracking-widest font-medium">Periode Operasional: Maret 2026</p>
+            </div>
+            <div class="no-print">
+                <button onclick="window.print()" class="bg-slate-800 text-white px-5 py-2 rounded-md text-sm font-semibold hover:bg-slate-700 transition">Cetak Laporan (A4)</button>
+            </div>
+        </div>
+
+        <!-- 1. KPI SUMMARY CARDS -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="bg-slate-50 p-4 border-l-4 border-blue-600 rounded-r-md">
+                <span class="text-[10px] font-bold text-slate-400 uppercase">Total Sales (2025FH)</span>
+                <div class="text-xl font-bold text-slate-800">932,575,875</div>
+            </div>
+            <div class="bg-slate-50 p-4 border-l-4 border-teal-600 rounded-r-md">
+                <span class="text-[10px] font-bold text-slate-400 uppercase">Total F-Cost (2025LH)</span>
+                <div class="text-xl font-bold text-slate-800">7,571,386</div>
+            </div>
+            <div class="bg-slate-50 p-4 border-l-4 border-orange-500 rounded-r-md">
+                <span class="text-[10px] font-bold text-slate-400 uppercase">Ratio vs Sales (Mar-26)</span>
+                <div class="text-xl font-bold text-orange-600">0.63%</div>
+            </div>
+            <div class="bg-slate-50 p-4 border-l-4 border-emerald-500 rounded-r-md">
+                <span class="text-[10px] font-bold text-slate-400 uppercase">Cost vs Target</span>
+                <div class="text-xl font-bold text-emerald-600">84.5%</div>
+            </div>
+        </div>
+
+        <!-- 2. MONTHLY PERFORMANCE TABLE (FULL WIDTH - NO SCROLL) -->
+        <div class="mb-8">
+            <h2 class="text-sm font-bold text-blue-900 mb-3 flex items-center">
+                <span class="bg-blue-900 text-white text-[10px] px-2 py-0.5 rounded mr-2">A</span>
+                TABEL PERFORMA BIAYA BULANAN (ACTUAL VS TARGET)
+            </h2>
+            <div class="overflow-hidden border border-slate-200 rounded-lg">
+                <table class="table-standard w-full border-collapse">
+                    <thead>
+                        <tr>
+                            <th class="label-cell bg-slate-800 text-white">Metrik Utama</th>
+                            <th>2025FH</th>
+                            <th>Oct-25</th>
+                            <th>Nov-25</th>
+                            <th>Dec-25</th>
+                            <th>Jan-26</th>
+                            <th>Feb-26</th>
+                            <th>Mar-26</th>
+                            <th class="bg-teal-700">2025LH</th>
+                        </tr>
+                    </thead>
+                    <tbody id="performance-body">
+                        <!-- Data injected via JS -->
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-2 italic">*Nilai mata uang disajikan dalam satuan Ribuan Rupiah (Rp. K)</p>
+        </div>
+
+        <!-- 3. BALANCED BOTTOM GRID (ALIGNMENT) -->
+        <div class="grid grid-cols-12 gap-6 items-stretch">
+
+            <!-- LEFT COLUMN: TREND -->
+            <div class="col-span-7 flex flex-col">
+                <h2 class="text-sm font-bold text-blue-900 mb-3 flex items-center">
+                    <span class="bg-blue-900 text-white text-[10px] px-2 py-0.5 rounded mr-2">B</span>
+                    TREN F-COST VS TARGET (OCT '25 - MAR '26)
+                </h2>
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 flex-grow">
+                    <div class="chart-box">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: BREAKDOWN & ROOT CAUSE -->
+            <div class="col-span-5 flex flex-col">
+                <h2 class="text-sm font-bold text-blue-900 mb-3 flex items-center">
+                    <span class="bg-blue-900 text-white text-[10px] px-2 py-0.5 rounded mr-2">C</span>
+                    DETAIL LCD F-COST & PART CONTRIBUTION
+                </h2>
+
+                <div class="bg-white p-4 rounded-lg border border-slate-200 flex-grow flex flex-col justify-between space-y-4">
+                    <!-- LCD F-Cost (Based on image_adda7e.png) -->
+                    <div class="grid grid-cols-2 gap-4 items-center border-b border-slate-100 pb-4">
+                        <div class="h-[140px]">
+                            <canvas id="donutChart"></canvas>
+                        </div>
+                        <div>
+                            <table class="w-full text-[11px]">
+                                <tr class="border-b border-slate-100"><td class="py-1 text-slate-500">Items</td><td class="text-right font-bold text-slate-700">Ratio</td></tr>
+                                <tr><td class="py-1">Part</td><td class="text-right font-bold text-blue-700">82.1%</td></tr>
+                                <tr><td class="py-1">Labor</td><td class="text-right">12.2%</td></tr>
+                                <tr><td class="py-1">Trip</td><td class="text-right">5.7%</td></tr>
+                                <tr class="font-bold text-slate-800"><td class="py-1">Total</td><td class="text-right">100%</td></tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Biggest Part Contribution -->
+                    <div>
+                        <h3 class="text-[10px] font-bold text-slate-400 mb-2 uppercase">Top 3 Part Contribution</h3>
+                        <table class="w-full text-[11px] table-fixed">
+                            <thead class="bg-slate-100">
+                                <tr>
+                                    <th class="text-left p-1 w-1/2">Part Name</th>
+                                    <th class="text-right p-1">Qty</th>
+                                    <th class="text-right p-1">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="border-b border-slate-50"><td class="p-1 font-medium">LCD Panel</td><td class="text-right p-1">4,017</td><td class="text-right p-1 font-bold">3,794,227</td></tr>
+                                <tr class="border-b border-slate-50"><td class="p-1 font-medium">Main PWB</td><td class="text-right p-1">4,178</td><td class="text-right p-1 font-bold">2,107,718</td></tr>
+                                <tr><td class="p-1 font-medium">Power PWB</td><td class="text-right p-1">389</td><td class="text-right p-1 font-bold">165,514</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Status Indicator -->
+                    <div class="flex justify-between items-center bg-emerald-50 p-2 rounded border border-emerald-100">
+                        <span class="text-[11px] font-bold text-emerald-800 uppercase">Operational Status (Mar-26)</span>
+                        <span class="bg-emerald-600 text-white text-[10px] font-bold px-3 py-1 rounded-full">✓ SYSTEM OK</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-8 pt-4 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400 uppercase tracking-widest">
+            <span>F-Cost Management Reporting System &copy; 2026</span>
+            <span>Confidential - For Internal Use Only</span>
+        </div>
+    </div>
+
+    <script>
+        // --- Data Population ---
+        const tableData = [
+            { label: 'Sales Revenue', values: ['932,575,875', '139,461,814', '187,289,985', '196,033,822', '186,235,394', '158,452,783', '155,281,286', '1,022,755,085'], bold: true },
+            { label: 'Actual F-Cost', values: ['8,827,206', '1,284,791', '1,383,947', '1,344,461', '1,336,821', '1,236,685', '984,681', '7,571,386'], color: 'text-blue-700' },
+            { label: 'Target F-Cost', values: ['8,244,000', '1,494,000', '1,494,000', '1,494,000', '1,494,000', '1,494,000', '1,494,000', '8,964,000'], italic: true },
+            { label: 'Ratio vs Sales', values: ['0.95%', '0.92%', '0.74%', '0.69%', '0.72%', '0.78%', '0.63%', '0.74%'] },
+            { label: 'Cost vs Target', values: ['107.1%', '86%', '93%', '90%', '89%', '83%', '66%', '84.5%'], highlight: true }
+        ];
+
+        function renderTable() {
+            const container = document.getElementById('performance-body');
+            tableData.forEach(row => {
+                let tr = document.createElement('tr');
+                let labelTd = document.createElement('td');
+                labelTd.className = 'label-cell';
+                labelTd.innerText = row.label;
+                tr.appendChild(labelTd);
+
+                row.values.forEach((val, idx) => {
+                    let td = document.createElement('td');
+                    if (row.bold) td.classList.add('font-bold', 'text-slate-900');
+                    if (row.color) td.classList.add(row.color, 'font-semibold');
+                    if (row.highlight) {
+                        td.classList.add('font-bold');
+                        if (parseFloat(val) > 100) td.classList.add('text-orange-600');
+                        else td.classList.add('text-emerald-600');
+                    }
+                    if (idx === 7) td.classList.add('bg-slate-50', 'font-bold');
+                    td.innerText = val;
+                    tr.appendChild(td);
+                });
+                container.appendChild(tr);
+            });
+        }
+
+        // --- Charts Initialization ---
+        function initCharts() {
+            const months = ['Oct-25', 'Nov-25', 'Dec-25', 'Jan-26', 'Feb-26', 'Mar-26'];
+            const actuals = [1284791, 1383947, 1344461, 1336821, 1236685, 984681];
+            const targets = [1494000, 1494000, 1494000, 1494000, 1494000, 1494000];
+
+            // 1. Trend Line Chart
+            new Chart(document.getElementById('trendChart'), {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [
+                        {
+                            label: 'Actual F-Cost',
+                            data: actuals,
+                            borderColor: '#1d4ed8',
+                            backgroundColor: '#1d4ed8',
+                            borderWidth: 3,
+                            pointRadius: 4,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Target F-Cost',
+                            data: targets,
+                            borderColor: '#94a3b8',
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10, weight: 'bold' } } }
+                    },
+                    scales: {
+                        y: { beginAtZero: false, ticks: { font: { size: 9 } } },
+                        x: { ticks: { font: { size: 10 } } }
+                    }
+                }
+            });
+
+            // 2. LCD Breakdown Donut
+            new Chart(document.getElementById('donutChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Part', 'Labor', 'Trip'],
+                    datasets: [{
+                        data: [82.1, 12.2, 5.7],
+                        backgroundColor: ['#1e3a8a', '#3b82f6', '#94a3b8'],
+                        hoverOffset: 4,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        window.onload = () => {
+            renderTable();
+            initCharts();
+        };
+    </script>
+</body>
+</html>

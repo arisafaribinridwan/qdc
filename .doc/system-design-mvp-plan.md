@@ -102,11 +102,15 @@ Entitas utama yang masuk MVP:
 - defect_category_entries
 - nondefect_category_entries
 - repair_action_entries
-- fcost_entries
+- fiscal_quality_targets
+- fiscal_fcost_targets
+- monthly_fcost_summaries
+- monthly_fcost_item_breakdowns
+- monthly_fcost_part_category_breakdowns
 - validation_runs
 - export_jobs
 
-Intinya, schema harus cukup untuk menyimpan data bulanan dan memetakan output report tanpa mengandalkan spreadsheet sebagai database.
+Intinya, schema harus cukup untuk menyimpan data bulanan dan memetakan output report tanpa mengandalkan spreadsheet sebagai database. Untuk FQMS, target monthly PPM disimpan per fiscal half dan report menghitung PPM akumulasi berbobot dari data bulanan. Untuk F-COST, summary, breakdown `Part/Labor/Trip`, dan breakdown kategori part disimpan per bulan; target F-COST disimpan per fiscal half; LY F-Cost dihitung dari bulan yang sama satu tahun sebelumnya, bukan input manual.
 
 ## Aturan data penting
 
@@ -174,7 +178,11 @@ Minimum checks:
 - sales quantity kosong atau nol saat ada qty yang harus dihitung
 - category entry tidak memakai referensi standar
 - data report month tercampur dengan bulan lain
-- F-COST belum terisi jika report month mengaktifkannya
+- F-COST summary belum terisi jika report month mengaktifkannya
+- target F-COST fiscal half berjalan belum tersedia
+- total breakdown `Part + Labor + Trip` tidak sama dengan total F-COST current half
+- total part category tidak sama dengan total item `Part`
+- LY F-Cost bulan yang sama satu tahun sebelumnya belum tersedia; tampilkan `LY data missing`, bukan input manual LY
 
 Validation harus menghasilkan status jelas: OK atau CHECK, plus alasan dan link ke data yang perlu diperbaiki.
 
@@ -255,7 +263,10 @@ Urutan yang paling sehat:
 - CRUD defect category entries
 - CRUD non-defect category entries
 - CRUD repair action entries
-- CRUD F-COST entries
+- CRUD monthly F-COST summary
+- CRUD monthly F-COST item breakdown (`Part`, `Labor`, `Trip`)
+- CRUD monthly F-COST part category breakdown
+- CRUD fiscal quality target dan fiscal F-COST target
 - buat UX input cepat dan editable table yang nyaman
 
 ### Phase 5 — validation
@@ -270,7 +281,7 @@ Urutan yang paling sehat:
 - buat view model report dari database
 - mapping grouping model
 - susun data untuk preview FQMS
-- susun data untuk preview F-COST
+- susun data untuk preview F-COST dengan `Cost vs Target`, LY dari bulan yang sama tahun sebelumnya, dan breakdown bulanan yang diakumulasi ke fiscal half
 - pastikan struktur siap untuk PDF dan Excel
 
 ### Phase 7 — preview & PDF

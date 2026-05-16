@@ -1,8 +1,8 @@
  # PRD — QRCC FQMS/F-COST Monthly Workflow
 
-> **Versi**: 1.0 · **Terakhir diperbarui**: 2026-05-14
+> **Versi**: 1.0 · **Terakhir diperbarui**: 2026-05-16
 >
-> Dokumen ini adalah **sumber kebenaran utama (single source of truth)** untuk seluruh pengembangan aplikasi QRCC Data Center modul FQMS/F-COST. Jika ada konflik antara dokumen lain dengan file ini, **ikuti file ini**.
+> Dokumen ini adalah **sumber kebenaran utama (single source of truth)** untuk seluruh pengembangan aplikasi QRCC Data Center modul FQMS/F-COST. Jika ada konflik antara dokumen lain dengan file ini, **ikuti file ini**. Dokumen lain di folder `.doc/` adalah arsip, discovery notes, atau supporting plan yang harus tunduk pada keputusan di file ini.
 
 ---
 
@@ -212,22 +212,78 @@ Struktur sama dengan `defect_category_entries`, FK `category_id` → `nondefect_
 | defect_ppm | real | PPM |
 | remark | text | Catatan nullable |
 
-### 6.10 fcost_entries
+### 6.10 fiscal_quality_targets
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| fiscal_half | text | Label fiscal half, misal `2025FH` / `2025LH` |
+| product | text | Product report, misal `LCD` |
+| manufacturer | text | Vendor/manufacturer report, misal `LOCAL` |
+| target_monthly_ppm | real | Target monthly PPM global FQMS untuk fiscal half |
+| effective_from | text | ISO date awal fiscal half |
+| effective_to | text | ISO date akhir fiscal half |
+| remark | text | Catatan nullable |
+
+### 6.11 fiscal_fcost_targets
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| fiscal_half | text | Label fiscal half, misal `2025FH` / `2025LH` |
+| product | text | Product report, misal `LCD` |
+| manufacturer | text | Vendor/manufacturer report, misal `LOCAL` |
+| target_fcost | real | Target F-COST bulanan yang berlaku sama untuk semua bulan dalam fiscal half |
+| effective_from | text | ISO date awal fiscal half |
+| effective_to | text | ISO date akhir fiscal half |
+| remark | text | Catatan nullable |
+
+### 6.12 monthly_fcost_summaries
 
 | Field | Type | Keterangan |
 |---|---|---|
 | id | integer PK | Auto-increment |
 | report_month_id | integer FK | → report_months.id |
-| sales_amount | real | Nilai penjualan |
-| sales_qty | integer | Jumlah unit |
-| fcost_amount | real | Nilai F-COST |
+| product | text | Product report, misal `LCD` |
+| manufacturer | text | Vendor/manufacturer report, misal `LOCAL` |
+| sales_amount | real | Nilai penjualan, satuan mengikuti template `Amount < Rp. K>` |
+| sales_qty | integer | Jumlah unit sales |
+| fcost_amount | real | Nilai F-COST, satuan mengikuti template `Amount < Rp. K>` |
 | fcost_qty | integer | Jumlah unit F-COST |
-| target_ratio | real | Target rasio |
-| actual_ratio | real | Rasio aktual |
-| last_year_result | real | Hasil tahun lalu |
 | remark | text | Catatan nullable |
 
-### 6.11 validation_runs
+**Constraint:** `UNIQUE(report_month_id, product, manufacturer)`
+
+### 6.13 monthly_fcost_item_breakdowns
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| report_month_id | integer FK | → report_months.id |
+| product | text | Product report |
+| manufacturer | text | Vendor/manufacturer report |
+| item_type | text | `Part` / `Labor` / `Trip` |
+| amount | real | Amount bulanan item F-COST |
+| remark | text | Catatan nullable |
+
+**Constraint:** `UNIQUE(report_month_id, product, manufacturer, item_type)`
+
+### 6.14 monthly_fcost_part_category_breakdowns
+
+| Field | Type | Keterangan |
+|---|---|---|
+| id | integer PK | Auto-increment |
+| report_month_id | integer FK | → report_months.id |
+| product | text | Product report |
+| manufacturer | text | Vendor/manufacturer report |
+| part_category | text | `Panel` / `Main Unit` / `Power Unit` / `Other` |
+| amount | real | Amount bulanan kategori part |
+| qty | integer | Qty bulanan kategori part |
+| remark | text | Catatan nullable |
+
+**Constraint:** `UNIQUE(report_month_id, product, manufacturer, part_category)`
+
+### 6.15 validation_runs
 
 | Field | Type | Keterangan |
 |---|---|---|
@@ -237,7 +293,7 @@ Struktur sama dengan `defect_category_entries`, FK `category_id` → `nondefect_
 | checked_at | text | ISO timestamp |
 | summary_json | text | JSON snapshot hasil validasi |
 
-### 6.12 export_jobs
+### 6.16 export_jobs
 
 | Field | Type | Keterangan |
 |---|---|---|
@@ -256,12 +312,27 @@ Struktur sama dengan `defect_category_entries`, FK `category_id` → `nondefect_
 
 | Aturan | Formula / Ketentuan |
 |---|---|
-| **PPM** | `qty / sales_qty × 1.000.000` |
+| **Monthly PPM dasar** | `qty / sales_qty × 1.000.000`; dipakai untuk validasi/entry bulanan sederhana jika diperlukan |
 | **PPM saat sales_qty = 0** | Tampilkan `CHECK`, jangan tampilkan angka PPM |
+| **FQMS accumulated sales** | Akumulasi sales bulanan dari launching month model sampai report month |
+| **FQMS launching period** | Selisih bulan antara launching month dan report month |
+| **FQMS AVG defect PPM** | `accumulated_defect_qty / (accumulated_sales × launching_period) × 1.000.000` |
+| **FQMS AVG non-defect PPM** | `accumulated_nondefect_qty / (accumulated_sales × launching_period) × 1.000.000` |
+| **FQMS total AVG defect PPM** | `total_defect / Σ(accumulated_sales_model × launching_period_model) × 1.000.000`; bukan average sederhana antar model |
+| **FQMS quality level** | `NG` jika AVG defect PPM >= target monthly PPM fiscal half, selain itu `OK` |
 | **Total defect category** | Σ `defect_category_entries.qty` per model per bulan **harus =** `monthly_model_summaries.total_defect_qty` |
 | **Total nondefect category** | Σ `nondefect_category_entries.qty` per model per bulan **harus =** `monthly_model_summaries.total_nondefect_qty` |
 | **Sales qty sumber utama** | `monthly_model_summaries.sales_qty`. Field `sales_qty_snapshot` di entries hanya untuk audit. |
 | **Grouping model** | Saat render report, gabungkan data berdasarkan `model_group_rules`. Data original tetap terpisah di DB. |
+| **Target monthly PPM FQMS** | Satu nilai global per product + manufacturer + fiscal half, di-update pada bulan pertama fiscal half |
+| **Target F-COST** | Satu nilai global per product + manufacturer + fiscal half, di-update pada bulan pertama fiscal half |
+| **F-COST Cost vs Target** | `fcost_amount / target_fcost`; menggantikan istilah template lama `Achievement` |
+| **F-COST Ratio vs Sales** | `fcost_amount / sales_amount` |
+| **F-COST Qty Ratio** | `fcost_qty / sales_qty` |
+| **F-COST LY** | Diambil dari F-COST bulan yang sama satu tahun sebelumnya; bukan input manual |
+| **F-COST Ratio vs LY** | `fcost_amount / ly_fcost` |
+| **F-COST item ratio** | `item_amount / total_fcost_amount` untuk item `Part`, `Labor`, `Trip` |
+| **F-COST part category ratio** | `part_category_amount / total_part_amount`; rasio tidak disimpan sebagai input manual |
 
 ---
 
@@ -277,8 +348,12 @@ Semua validasi menghasilkan status **OK** atau **CHECK** + alasan + link ke data
 | V4 | Non-defect total match | Σ non-defect entries = total_nondefect_qty di summary |
 | V5 | Sales qty presence | Model dengan qty > 0 harus punya sales_qty > 0 |
 | V6 | Category standardization | Semua entries harus pakai category_id dari reference table |
-| V7 | Report month consistency | Semua data report harus dari bulan yang sama |
-| V8 | F-COST completeness | Jika report F-COST aktif, data F-COST harus tersedia |
+| V7 | Report month consistency | Semua data report utama harus dari bulan yang benar; section trend dan LY boleh mengambil bulan historis sesuai rule report |
+| V8 | F-COST completeness | Jika report F-COST aktif, data F-COST summary bulan terpilih harus tersedia |
+| V9 | F-COST target presence | Target F-COST fiscal half berjalan harus tersedia |
+| V10 | F-COST item breakdown match | Σ item breakdown `Part` + `Labor` + `Trip` untuk current half harus = total F-COST current half |
+| V11 | F-COST part category match | Σ part category amount untuk current half harus = total item `Part` current half |
+| V12 | F-COST LY data presence | Data F-COST bulan yang sama satu tahun sebelumnya wajib tersedia untuk Ratio vs LY; jika tidak ada tampilkan `CHECK` / kosong dengan status `LY data missing` |
 
 ---
 
@@ -311,7 +386,8 @@ Semua validasi menghasilkan status **OK** atau **CHECK** + alasan + link ke data
 ### PDF
 - Dibuat dari **HTML/CSS print layout** via Playwright.
 - Route preview (`/reports/fqms/:month/preview`) = sumber layout yang sama untuk preview UI dan PDF output.
-- Section: Cover/Header, Quality Trend, Acceptance Ratio, Model Detail, Defect Category, Repair Action, F-COST.
+- Section FQMS: header, Quality Trend, Acceptance Ratio, Detail Model, Worst Defect. Quality Issue and Follow Up belum masuk scope FQMS MVP awal.
+- Section F-COST: header/summary, Monthly F-Cost, F-Cost Trend, Detail F-Cost & Part Contribution.
 - Nama file otomatis: `QRCC FQMS - LCD SEID Apr 2026.pdf`
 
 ### Excel
@@ -378,7 +454,10 @@ Semua validasi menghasilkan status **OK** atau **CHECK** + alasan + link ke data
 - [ ] CRUD API + Service untuk monthly_model_summaries
 - [ ] CRUD API + Service untuk defect/nondefect entries
 - [ ] CRUD API + Service untuk repair_action_entries
-- [ ] CRUD API + Service untuk fcost_entries
+- [ ] CRUD API + Service untuk monthly_fcost_summaries
+- [ ] CRUD API + Service untuk fiscal_fcost_targets
+- [ ] CRUD API + Service untuk monthly_fcost_item_breakdowns
+- [ ] CRUD API + Service untuk monthly_fcost_part_category_breakdowns
 
 ### Phase 7 — Integrasi Frontend ↔ Backend
 - [ ] Ganti mock data di semua halaman frontend dengan API calls
@@ -394,7 +473,7 @@ Semua validasi menghasilkan status **OK** atau **CHECK** + alasan + link ke data
 ### Phase 9 — Report View Model & Preview
 - [ ] Buat report builder service: transform long-format → report view model
 - [ ] Mapping grouping model
-- [ ] Data 6 bulan terakhir (jika tersedia)
+- [ ] Periode trend FQMS dan current fiscal half F-COST sesuai rule discovery
 - [ ] Wiring ke halaman `/reports/preview`
 
 ### Phase 10 — Export PDF
