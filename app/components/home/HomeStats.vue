@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { formatters } from 'date-fns';
 import type { Period, Range, Stat } from '~/types'
 
 const props = defineProps<{
