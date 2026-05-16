@@ -1,13 +1,5 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  vite: {
-    optimizeDeps: {
-      include: [
-        '@vue/devtools-core',
-        '@vue/devtools-kit',
-      ]
-    }
-  },
   modules: [
     '@nuxt/eslint',
     '@nuxt/ui',
@@ -27,6 +19,15 @@ export default defineNuxtConfig({
   },
 
   compatibilityDate: '2024-07-11',
+
+  vite: {
+    optimizeDeps: {
+      include: [
+        '@vue/devtools-core',
+        '@vue/devtools-kit'
+      ]
+    }
+  },
 
   eslint: {
     config: {

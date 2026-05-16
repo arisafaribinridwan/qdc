@@ -2,6 +2,7 @@
   "name": "nuxt-ui-qdc-dashboard",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.33.3",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
@@ -9,14 +10,17 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.66",
     "@iconify-json/simple-icons": "^1.2.50",
+    "@internationalized/date": "^3.12.1",
     "@nuxt/ui": "^4.7.1",
     "@unovis/ts": "^1.6.5",
     "@unovis/vue": "^1.6.5",
+    "@vueuse/core": "^14.3.0",
     "@vueuse/nuxt": "^14.3.0",
     "date-fns": "^4.1.0",
     "nuxt": "^4.4.5",
