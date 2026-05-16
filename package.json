@@ -2,6 +2,7 @@
   "name": "nuxt-ui-qdc-dashboard",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.33.3",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
@@ -9,6 +10,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
